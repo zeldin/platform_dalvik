@@ -910,6 +910,7 @@ static void* swapClassDefItem(const CheckState* state, void* ptr) {
     SWAP_INDEX4_OR_NOINDEX(item->sourceFileIdx, state->pHeader->stringIdsSize);
     SWAP_OFFSET4(item->annotationsOff);
     SWAP_OFFSET4(item->classDataOff);
+    SWAP_OFFSET4(item->staticValuesOff);
 
     if ((item->accessFlags & ~ACC_CLASS_MASK) != 0) {
         ALOGE("Bogus class access flags %x", item->accessFlags);
