@@ -43,6 +43,10 @@ static const char* kInstructionSet = "x86";
 static const char* kInstructionSet = "mips";
 #elif defined(__x86_64__)
 static const char* kInstructionSet = "x86_64";
+#elif defined(__powerpc64__)
+static const char* kInstructionSet = "ppc64";
+#elif defined(__powerpc__)
+static const char* kInstructionSet = "ppc";
 #else
 #error Unsupported instruction set.
 #endif
