@@ -16,8 +16,9 @@
 
 package com.android.dx.dex.file;
 
-import com.android.dx.rop.annotation.Annotation;
 import static com.android.dx.rop.annotation.AnnotationVisibility.SYSTEM;
+
+import com.android.dx.rop.annotation.Annotation;
 import com.android.dx.rop.annotation.NameValuePair;
 import com.android.dx.rop.cst.Constant;
 import com.android.dx.rop.cst.CstAnnotation;
@@ -29,12 +30,14 @@ import com.android.dx.rop.cst.CstString;
 import com.android.dx.rop.cst.CstType;
 import com.android.dx.rop.type.Type;
 import com.android.dx.rop.type.TypeList;
+
 import java.util.ArrayList;
 
 /**
  * Utility class for dealing with annotations.
  */
 public final class AnnotationUtils {
+
     /** {@code non-null;} type for {@code AnnotationDefault} annotations */
     private static final CstType ANNOTATION_DEFAULT_TYPE =
         CstType.intern(Type.intern("Ldalvik/annotation/AnnotationDefault;"));

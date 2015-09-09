@@ -20,7 +20,6 @@ import com.android.dex.util.ExceptionWithContext;
 import com.android.dx.cf.code.ConcreteMethod;
 import com.android.dx.cf.code.Ropper;
 import com.android.dx.cf.direct.DirectClassFile;
-import com.android.dx.cf.direct.StdAttributeFactory;
 import com.android.dx.cf.iface.Field;
 import com.android.dx.cf.iface.FieldList;
 import com.android.dx.cf.iface.Method;
@@ -30,8 +29,11 @@ import com.android.dx.dex.code.DalvCode;
 import com.android.dx.dex.code.PositionList;
 import com.android.dx.dex.code.RopTranslator;
 import com.android.dx.dex.file.ClassDefItem;
+import com.android.dx.dex.file.DexFile;
 import com.android.dx.dex.file.EncodedField;
 import com.android.dx.dex.file.EncodedMethod;
+import com.android.dx.dex.file.FieldIdsSection;
+import com.android.dx.dex.file.MethodIdsSection;
 import com.android.dx.rop.annotation.Annotations;
 import com.android.dx.rop.annotation.AnnotationsList;
 import com.android.dx.rop.code.AccessFlags;
@@ -41,11 +43,15 @@ import com.android.dx.rop.code.LocalVariableInfo;
 import com.android.dx.rop.code.RopMethod;
 import com.android.dx.rop.code.TranslationAdvice;
 import com.android.dx.rop.cst.Constant;
+import com.android.dx.rop.cst.ConstantPool;
+import com.android.dx.rop.cst.CstBaseMethodRef;
 import com.android.dx.rop.cst.CstBoolean;
 import com.android.dx.rop.cst.CstByte;
 import com.android.dx.rop.cst.CstChar;
+import com.android.dx.rop.cst.CstEnumRef;
 import com.android.dx.rop.cst.CstFieldRef;
 import com.android.dx.rop.cst.CstInteger;
+import com.android.dx.rop.cst.CstInterfaceMethodRef;
 import com.android.dx.rop.cst.CstMethodRef;
 import com.android.dx.rop.cst.CstShort;
 import com.android.dx.rop.cst.CstString;
@@ -74,19 +80,19 @@ public class CfTranslator {
      * Takes a {@code byte[]}, interprets it as a Java classfile, and
      * translates it into a {@link ClassDefItem}.
      *
-     * @param filePath {@code non-null;} the file path for the class,
-     * excluding any base directory specification
+     * @param cf {@code non-null;} the class file
      * @param bytes {@code non-null;} contents of the file
      * @param cfOptions options for class translation
      * @param dexOptions options for dex output
+     * @param dexFile {@code non-null;} dex output
      * @return {@code non-null;} the translated class
      */
-    public static ClassDefItem translate(String filePath, byte[] bytes,
-            CfOptions cfOptions, DexOptions dexOptions) {
+    public static ClassDefItem translate(DirectClassFile cf, byte[] bytes,
+            CfOptions cfOptions, DexOptions dexOptions, DexFile dexFile) {
         try {
-            return translate0(filePath, bytes, cfOptions, dexOptions);
+            return translate0(cf, bytes, cfOptions, dexOptions, dexFile);
         } catch (RuntimeException ex) {
-            String msg = "...while processing " + filePath;
+            String msg = "...while processing " + cf.getFilePath();
             throw ExceptionWithContext.withContext(ex, msg);
         }
     }
@@ -96,20 +102,15 @@ public class CfTranslator {
      * from {@link #translate} just to keep things a bit simpler in
      * terms of exception handling.
      *
-     * @param filePath {@code non-null;} the file path for the class,
-     * excluding any base directory specification
+     * @param cf {@code non-null;} the class file
      * @param bytes {@code non-null;} contents of the file
      * @param cfOptions options for class translation
      * @param dexOptions options for dex output
+     * @param dexFile {@code non-null;} dex output
      * @return {@code non-null;} the translated class
      */
-    private static ClassDefItem translate0(String filePath, byte[] bytes,
-            CfOptions cfOptions, DexOptions dexOptions) {
-        DirectClassFile cf =
-            new DirectClassFile(bytes, filePath, cfOptions.strictNameCheck);
-
-        cf.setAttributeFactory(StdAttributeFactory.THE_ONE);
-        cf.getMagic();
+    private static ClassDefItem translate0(DirectClassFile cf, byte[] bytes,
+            CfOptions cfOptions, DexOptions dexOptions, DexFile dexFile) {
 
         OptimizerOptions.loadOptimizeLists(cfOptions.optimizeListFile,
                 cfOptions.dontOptimizeListFile);
@@ -127,11 +128,30 @@ public class CfTranslator {
         Annotations classAnnotations =
             AttributeTranslator.getClassAnnotations(cf, cfOptions);
         if (classAnnotations.size() != 0) {
-            out.setClassAnnotations(classAnnotations);
+            out.setClassAnnotations(classAnnotations, dexFile);
         }
 
-        processFields(cf, out);
-        processMethods(cf, cfOptions, dexOptions, out);
+        FieldIdsSection fieldIdsSection = dexFile.getFieldIds();
+        MethodIdsSection methodIdsSection = dexFile.getMethodIds();
+        processFields(cf, out, dexFile);
+        processMethods(cf, cfOptions, dexOptions, out, dexFile);
+
+        // intern constant pool method, field and type references
+        ConstantPool constantPool = cf.getConstantPool();
+        int constantPoolSize = constantPool.size();
+
+        for (int i = 0; i < constantPoolSize; i++) {
+            Constant constant = constantPool.getOrNull(i);
+            if (constant instanceof CstMethodRef) {
+                methodIdsSection.intern((CstBaseMethodRef) constant);
+            } else if (constant instanceof CstInterfaceMethodRef) {
+                methodIdsSection.intern(((CstInterfaceMethodRef) constant).toMethodRef());
+            } else if (constant instanceof CstFieldRef) {
+                fieldIdsSection.intern((CstFieldRef) constant);
+            } else if (constant instanceof CstEnumRef) {
+                fieldIdsSection.intern(((CstEnumRef) constant).getFieldRef());
+            }
+        }
 
         return out;
     }
@@ -141,8 +161,10 @@ public class CfTranslator {
      *
      * @param cf {@code non-null;} class being translated
      * @param out {@code non-null;} output class
+     * @param dexFile {@code non-null;} dex output
      */
-    private static void processFields(DirectClassFile cf, ClassDefItem out) {
+    private static void processFields(
+            DirectClassFile cf, ClassDefItem out, DexFile dexFile) {
         CstType thisClass = cf.getThisClass();
         FieldList fields = cf.getFields();
         int sz = fields.size();
@@ -168,8 +190,9 @@ public class CfTranslator {
                 Annotations annotations =
                     AttributeTranslator.getAnnotations(one.getAttributes());
                 if (annotations.size() != 0) {
-                    out.addFieldAnnotations(field, annotations);
+                    out.addFieldAnnotations(field, annotations, dexFile);
                 }
+                dexFile.getFieldIds().intern(field);
             } catch (RuntimeException ex) {
                 String msg = "...while processing " + one.getName().toHuman() +
                     " " + one.getDescriptor().toHuman();
@@ -220,9 +243,10 @@ public class CfTranslator {
      * @param cfOptions {@code non-null;} options for class translation
      * @param dexOptions {@code non-null;} options for dex output
      * @param out {@code non-null;} output class
+     * @param dexFile {@code non-null;} dex output
      */
     private static void processMethods(DirectClassFile cf, CfOptions cfOptions,
-            DexOptions dexOptions, ClassDefItem out) {
+            DexOptions dexOptions, ClassDefItem out, DexFile dexFile) {
         CstType thisClass = cf.getThisClass();
         MethodList methods = cf.getMethods();
         int sz = methods.size();
@@ -253,7 +277,7 @@ public class CfTranslator {
 
                     advice = DexTranslationAdvice.THE_ONE;
 
-                    RopMethod rmeth = Ropper.convert(concrete, advice);
+                    RopMethod rmeth = Ropper.convert(concrete, advice, methods);
                     RopMethod nonOptRmeth = null;
                     int paramSize;
 
@@ -330,14 +354,15 @@ public class CfTranslator {
                 Annotations annotations =
                     AttributeTranslator.getMethodAnnotations(one);
                 if (annotations.size() != 0) {
-                    out.addMethodAnnotations(meth, annotations);
+                    out.addMethodAnnotations(meth, annotations, dexFile);
                 }
 
                 AnnotationsList list =
                     AttributeTranslator.getParameterAnnotations(one);
                 if (list.size() != 0) {
-                    out.addParameterAnnotations(meth, list);
+                    out.addParameterAnnotations(meth, list, dexFile);
                 }
+                dexFile.getMethodIds().intern(meth);
             } catch (RuntimeException ex) {
                 String msg = "...while processing " + one.getName().toHuman() +
                     " " + one.getDescriptor().toHuman();

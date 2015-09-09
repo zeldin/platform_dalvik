@@ -33,7 +33,44 @@
 #ifndef LIBDEX_DEXFILE_H_
 #define LIBDEX_DEXFILE_H_
 
-#include "vm/Common.h"      // basic type defs, e.g. u1/u2/u4/u8, and LOG
+#ifndef LOG_TAG
+# define LOG_TAG "libdex"
+#endif
+
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <assert.h>
+#include "cutils/log.h"
+
+/*
+ * If "very verbose" logging is enabled, make it equivalent to ALOGV.
+ * Otherwise, make it disappear.
+ *
+ * Define this above the #include "Dalvik.h" to enable for only a
+ * single file.
+ */
+/* #define VERY_VERBOSE_LOG */
+#if defined(VERY_VERBOSE_LOG)
+# define LOGVV      ALOGV
+# define IF_LOGVV() IF_ALOGV()
+#else
+# define LOGVV(...) ((void)0)
+# define IF_LOGVV() if (false)
+#endif
+
+/*
+ * These match the definitions in the VM specification.
+ */
+typedef uint8_t             u1;
+typedef uint16_t            u2;
+typedef uint32_t            u4;
+typedef uint64_t            u8;
+typedef int8_t              s1;
+typedef int16_t             s2;
+typedef int32_t             s4;
+typedef int64_t             s8;
+
 #include "libdex/SysUtil.h"
 
 /*
@@ -825,6 +862,7 @@ DEX_INLINE const DexAnnotationSetItem* dexGetClassAnnotationSet(
 DEX_INLINE const DexFieldAnnotationsItem* dexGetFieldAnnotations(
     const DexFile* pDexFile, const DexAnnotationsDirectoryItem* pAnnoDir)
 {
+    (void) pDexFile;
     if (pAnnoDir->fieldsSize == 0)
         return NULL;
 
@@ -836,6 +874,7 @@ DEX_INLINE const DexFieldAnnotationsItem* dexGetFieldAnnotations(
 DEX_INLINE int dexGetFieldAnnotationsSize(const DexFile* pDexFile,
     const DexAnnotationsDirectoryItem* pAnnoDir)
 {
+    (void) pDexFile;
     return pAnnoDir->fieldsSize;
 }
 
@@ -850,6 +889,7 @@ DEX_INLINE const DexAnnotationSetItem* dexGetFieldAnnotationSetItem(
 DEX_INLINE const DexMethodAnnotationsItem* dexGetMethodAnnotations(
     const DexFile* pDexFile, const DexAnnotationsDirectoryItem* pAnnoDir)
 {
+    (void) pDexFile;
     if (pAnnoDir->methodsSize == 0)
         return NULL;
 
@@ -866,6 +906,7 @@ DEX_INLINE const DexMethodAnnotationsItem* dexGetMethodAnnotations(
 DEX_INLINE int dexGetMethodAnnotationsSize(const DexFile* pDexFile,
     const DexAnnotationsDirectoryItem* pAnnoDir)
 {
+    (void) pDexFile;
     return pAnnoDir->methodsSize;
 }
 
@@ -880,6 +921,7 @@ DEX_INLINE const DexAnnotationSetItem* dexGetMethodAnnotationSetItem(
 DEX_INLINE const DexParameterAnnotationsItem* dexGetParameterAnnotations(
     const DexFile* pDexFile, const DexAnnotationsDirectoryItem* pAnnoDir)
 {
+    (void) pDexFile;
     if (pAnnoDir->parametersSize == 0)
         return NULL;
 
@@ -897,6 +939,7 @@ DEX_INLINE const DexParameterAnnotationsItem* dexGetParameterAnnotations(
 DEX_INLINE int dexGetParameterAnnotationsSize(const DexFile* pDexFile,
     const DexAnnotationsDirectoryItem* pAnnoDir)
 {
+    (void) pDexFile;
     return pAnnoDir->parametersSize;
 }
 

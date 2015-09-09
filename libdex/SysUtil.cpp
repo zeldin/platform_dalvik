@@ -24,7 +24,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
-#ifdef HAVE_POSIX_FILEMAP
+#if !defined(__MINGW32__)
 # include <sys/mman.h>
 #endif
 #include <limits.h>
@@ -40,7 +40,7 @@
  */
 static void* sysCreateAnonShmem(size_t length)
 {
-#ifdef HAVE_POSIX_FILEMAP
+#if !defined(__MINGW32__)
     void* ptr;
 
     ptr = mmap(NULL, length, PROT_READ | PROT_WRITE,
@@ -106,7 +106,7 @@ static int getFileStartAndLength(int fd, off_t *start_, size_t *length_)
     return 0;
 }
 
-#ifndef HAVE_POSIX_FILEMAP
+#if defined(__MINGW32__)
 int sysFakeMapFile(int fd, MemMapping* pMap)
 {
     /* No MMAP, just fake it by copying the bits.
@@ -149,7 +149,7 @@ int sysFakeMapFile(int fd, MemMapping* pMap)
  */
 int sysMapFileInShmemWritableReadOnly(int fd, MemMapping* pMap)
 {
-#ifdef HAVE_POSIX_FILEMAP
+#if !defined(__MINGW32__)
     off_t start;
     size_t length;
     void* memPtr;
@@ -169,7 +169,7 @@ int sysMapFileInShmemWritableReadOnly(int fd, MemMapping* pMap)
     if (mprotect(memPtr, length, PROT_READ) < 0) {
         /* this fails with EACCESS on FAT filesystems, e.g. /sdcard */
         int err = errno;
-        ALOGV("mprotect(%p, %d, PROT_READ) failed: %s",
+        ALOGV("mprotect(%p, %zd, PROT_READ) failed: %s",
             memPtr, length, strerror(err));
         ALOGD("mprotect(RO) failed (%d), file will remain read-write", err);
     }
@@ -193,7 +193,7 @@ int sysMapFileInShmemWritableReadOnly(int fd, MemMapping* pMap)
 int sysMapFileSegmentInShmem(int fd, off_t start, size_t length,
     MemMapping* pMap)
 {
-#ifdef HAVE_POSIX_FILEMAP
+#if !defined(__MINGW32__)
     size_t actualLength;
     off_t actualStart;
     int adjust;
@@ -239,7 +239,7 @@ int sysMapFileSegmentInShmem(int fd, off_t start, size_t length,
 int sysChangeMapAccess(void* addr, size_t length, int wantReadWrite,
     MemMapping* pMap)
 {
-#ifdef HAVE_POSIX_FILEMAP
+#if !defined(__MINGW32__)
     /*
      * Verify that "addr" is part of this mapping file.
      */
@@ -278,15 +278,15 @@ int sysChangeMapAccess(void* addr, size_t length, int wantReadWrite,
  */
 void sysReleaseShmem(MemMapping* pMap)
 {
-#ifdef HAVE_POSIX_FILEMAP
+#if !defined(__MINGW32__)
     if (pMap->baseAddr == NULL && pMap->baseLength == 0)
         return;
 
     if (munmap(pMap->baseAddr, pMap->baseLength) < 0) {
-        ALOGW("munmap(%p, %d) failed: %s",
-            pMap->baseAddr, (int)pMap->baseLength, strerror(errno));
+        ALOGW("munmap(%p, %zd) failed: %s",
+            pMap->baseAddr, pMap->baseLength, strerror(errno));
     } else {
-        ALOGV("munmap(%p, %d) succeeded", pMap->baseAddr, pMap->baseLength);
+        ALOGV("munmap(%p, %zd) succeeded", pMap->baseAddr, pMap->baseLength);
         pMap->baseAddr = NULL;
         pMap->baseLength = 0;
     }
